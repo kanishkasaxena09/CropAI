@@ -1,0 +1,12 @@
+{
+  "buildCommand": "npm run build --prefix crop_disease_detector",
+  "outputDirectory": "crop_disease_detector/dist",
+  "installCommand": "npm install --prefix crop_disease_detector",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

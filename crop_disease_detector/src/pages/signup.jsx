@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
+import { API_BASE_URL } from '../services/api';
 
 const CustomModal = ({ isOpen, message, onClose }) => (
   <AnimatePresence>
@@ -32,7 +33,7 @@ const Signup = ({ setIsLoggedIn }) => {
     if (!formData.email) return setModal({ open: true, message: 'Pehle email toh dalo lala!' });
     setLoading(true);
     try {
-      await axios.post("http://127.0.0.1:8000/send-otp", { email: formData.email });
+      await axios.post(`${API_BASE_URL}/send-otp`, { email: formData.email });
       setOtpSent(true);
     } catch (err) {
       setModal({ open: true, message: 'OTP nahi gaya.' });
@@ -44,7 +45,7 @@ const Signup = ({ setIsLoggedIn }) => {
     setLoading(true);
 
     try {
-      const response = await axios.post("http://127.0.0.1:8000/signup", formData);
+      const response = await axios.post(`${API_BASE_URL}/signup`, formData);
 
       if (response.status === 200) {
        

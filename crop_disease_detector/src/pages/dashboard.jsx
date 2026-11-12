@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import PageTransition from '../components/PageTransition';
+import { API_BASE_URL } from '../services/api';
 
 const Dashboard = () => {
   const [stats, setStats] = useState({ total: 0, healthy: 0, unhealthy: 0 });
@@ -11,7 +12,7 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        const response = await axios.get("http://127.0.0.1:8000/get-scans");
+        const response = await axios.get(`${API_BASE_URL}/get-scans`);
         setStats({
           total: response.data.total,
           healthy: response.data.healthy,

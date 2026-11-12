@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
+import { API_BASE_URL } from '../services/api';
 
 const CustomModal = ({ isOpen, message, onClose }) => (
   <AnimatePresence>
@@ -31,7 +32,7 @@ const Login = ({ setIsLoggedIn }) => {
     setLoading(true);
 
     try {
-      const response = await axios.post("http://127.0.0.1:8000/login", { email, password });
+      const response = await axios.post(`${API_BASE_URL}/login`, { email, password });
 
       if (response.status === 200) {
         // save in browser memory

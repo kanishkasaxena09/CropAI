@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import axios from 'axios';
+import { API_BASE_URL } from '../services/api';
 
 const Profile = ({ setIsLoggedIn }) => {
   const [userName, setUserName] = useState('');
@@ -43,7 +44,7 @@ const Profile = ({ setIsLoggedIn }) => {
         // save in db
         try {
           const email = localStorage.getItem('userEmail');
-          await axios.put("http://127.0.0.1:8000/update-photo", {
+          await axios.put(`${API_BASE_URL}/update-photo`, {
             email: email,
             photo: base64
           });

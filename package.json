@@ -1,4 +1,11 @@
 {
+  "name": "cropai-root",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev --prefix crop_disease_detector",
+    "build": "npm run build --prefix crop_disease_detector",
+    "preview": "npm run preview --prefix crop_disease_detector"
+  },
   "dependencies": {
     "i18next": "^26.0.4",
     "i18next-browser-languagedetector": "^8.2.1",

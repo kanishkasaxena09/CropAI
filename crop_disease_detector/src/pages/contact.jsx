@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import PageTransition from '../components/PageTransition';
+import { API_BASE_URL } from '../services/api';
 
 const Contact = () => {
   const [formData, setFormData] = useState({ name: '', email: '', message: '' });
@@ -11,7 +12,7 @@ const Contact = () => {
     setLoading(true);
     try {
       //sending message to backed
-      const response = await axios.post("http://127.0.0.1:8000/contact", formData);
+      const response = await axios.post(`${API_BASE_URL}/contact`, formData);
       if (response.status === 200) {
         alert("Dhanyawad lala! Apka sandesh humein mil gaya hai.");
         setFormData({ name: '', email: '', message: '' }); // Form clear kar do
