@@ -1,0 +1,7 @@
+{
+  "welcome": "Welcome, {{name}}!",
+  "scan_btn": "Scan Now",
+  "logout": "Logout",
+  "history": "History",
+  "language_label": "App Language"
+}
