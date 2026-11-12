@@ -12,7 +12,11 @@ from PIL import Image
 import models, database
 
 # Database Setup
-models.Base.metadata.create_all(bind=database.engine)
+try:
+    models.Base.metadata.create_all(bind=database.engine)
+    print("Database tables initialized successfully.")
+except Exception as e:
+    print(f"Warning: Database initialization error: {e}")
 
 # Load class names safely
 try:
