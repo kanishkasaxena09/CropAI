@@ -33,20 +33,12 @@ const Signup = ({ setIsLoggedIn }) => {
     if (!formData.email) return setModal({ open: true, message: 'Pehle email toh dalo lala!' });
     setLoading(true);
     try {
-      const response = await axios.post(`${API_BASE_URL}/send-otp`, { email: formData.email });
+      await axios.post(`${API_BASE_URL}/send-otp`, { email: formData.email });
       setOtpSent(true);
-      if (response.data?.otp) {
-        setFormData(prev => ({ ...prev, otp: response.data.otp }));
-        setModal({
-          open: true,
-          message: `Aapka OTP hai: ${response.data.otp} (Cloud host par SMTP blocked hone par OTP yahan provide kiya gaya hai)`
-        });
-      } else {
-        alert("OTP aapke email par bhej diya gaya hai!");
-      }
+      alert("OTP aapke email par bhej diya gaya hai. Kripya apna inbox check karein!");
     } catch (err) {
       const errMsg = err.response?.data?.detail || err.message || 'Server se sampark nahi ho pa raha';
-      setModal({ open: true, message: `OTP nahi gaya: ${errMsg}` });
+      setModal({ open: true, message: errMsg });
     } finally { setLoading(false); }
   };
 

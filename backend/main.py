@@ -8,6 +8,7 @@ from fastapi import FastAPI, Depends, HTTPException, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
+from email_validator import validate_email, EmailNotValidError
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 from PIL import Image
 import models, database
@@ -186,17 +187,100 @@ def get_scans(db: Session = Depends(database.get_db)):
         "history": scans
     }
 
+async def dispatch_email(recipient: str, subject: str, body_text: str):
+    # 1. Brevo HTTPS API (Port 443 - works on Render Free Tier without SMTP blocks)
+    brevo_key = os.getenv("BREVO_API_KEY", "").strip()
+    if brevo_key:
+        try:
+            import urllib.request
+            payload = json.dumps({
+                "sender": {
+                    "name": "CropAI",
+                    "email": os.getenv("BREVO_SENDER_EMAIL", mail_user).strip()
+                },
+                "to": [{"email": recipient}],
+                "subject": subject,
+                "textContent": body_text
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                "https://api.brevo.com/v3/smtp/email",
+                data=payload,
+                headers={
+                    "api-key": brevo_key,
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                },
+                method="POST"
+            )
+            resp = urllib.request.urlopen(req, timeout=10)
+            if resp.status in (200, 201):
+                print(f"✅ OTP email delivered via Brevo API to {recipient}")
+                return True
+        except Exception as e:
+            print(f"⚠️ Brevo API Error: {e}")
+
+    # 2. Resend HTTPS API (Port 443 - works on Render)
+    resend_key = os.getenv("RESEND_API_KEY", "").strip()
+    if resend_key:
+        try:
+            import urllib.request
+            sender_resend = os.getenv("RESEND_FROM", "CropAI <onboarding@resend.dev>").strip()
+            payload = json.dumps({
+                "from": sender_resend,
+                "to": [recipient],
+                "subject": subject,
+                "text": body_text
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                "https://api.resend.com/emails",
+                data=payload,
+                headers={
+                    "Authorization": f"Bearer {resend_key}",
+                    "Content-Type": "application/json"
+                },
+                method="POST"
+            )
+            resp = urllib.request.urlopen(req, timeout=10)
+            if resp.status in (200, 201):
+                print(f"✅ OTP email delivered via Resend API to {recipient}")
+                return True
+        except Exception as e:
+            print(f"⚠️ Resend API Error: {e}")
+
+    # 3. SMTP fallback (works on port 587 when not blocked by host)
+    try:
+        message = MessageSchema(
+            subject=subject,
+            recipients=[recipient],
+            body=body_text,
+            subtype=MessageType.plain
+        )
+        fm = FastMail(conf)
+        await asyncio.wait_for(fm.send_message(message), timeout=7.0)
+        print(f"✅ OTP email successfully sent via SMTP to {recipient}")
+        return True
+    except Exception as e:
+        print(f"⚠️ SMTP Send Failed / Blocked on host: {e}")
+        return False
+
 # AUTH ROUTES
 @app.post("/send-otp")
 async def send_otp(email_data: dict, db: Session = Depends(database.get_db)):
-    email = email_data.get("email")
-    if not email:
-        raise HTTPException(status_code=400, detail="Email dalo!")
-    
+    raw_email = (email_data.get("email") or "").strip()
+    if not raw_email:
+        raise HTTPException(status_code=400, detail="Email address enter karein!")
+
+    # Validate deliverability and MX records to reject fake/non-existent emails
+    try:
+        valid_info = validate_email(raw_email, check_deliverability=True)
+        email = valid_info.normalized
+    except EmailNotValidError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid email: {e}")
+
     otp = str(random.randint(100000, 999999))
     otp_storage[email] = otp  
     
-    # Also save to database so spindowns/workers don't lose the OTP
+    # Save to database
     try:
         existing = db.query(models.OTPVerification).filter(models.OTPVerification.email == email).first()
         if existing:
@@ -212,28 +296,17 @@ async def send_otp(email_data: dict, db: Session = Depends(database.get_db)):
     print(f"🔑 CROP-AI OTP for {email} => [ {otp} ]")
     print("="*45 + "\n")
 
-    message = MessageSchema(
-        subject="CropAI OTP Verification",
-        recipients=[email],
-        body=f"Namaste!\n\nCropAI registration ke liye aapka OTP hai: {otp}\n\nDhanyawad,\nCropAI Team",
-        subtype=MessageType.plain
-    )
-    fm = FastMail(conf)
+    body_text = f"Namaste!\n\nCropAI registration ke liye aapka OTP hai: {otp}\n\nDhanyawad,\nCropAI Team"
+    sent = await dispatch_email(email, "CropAI OTP Verification", body_text)
     
-    try:
-        # Timeout after 7 seconds if cloud provider blocks port 587
-        await asyncio.wait_for(fm.send_message(message), timeout=7.0)
-        print(f"✅ OTP email successfully sent to {email}")
-        return {"message": "OTP Sent", "email_sent": True}
-    except Exception as e:
-        print(f"⚠️ SMTP Send Failed / Blocked on host (port 587 blocked): {e}")
-        # When cloud host (like Render free tier) blocks SMTP port 587, return OTP directly
-        return {
-            "message": "OTP generated successfully",
-            "otp": otp,
-            "email_sent": False,
-            "note": "SMTP blocked on free hosting; OTP provided directly."
-        }
+    if not sent:
+        # DO NOT leak OTP in response! Reject if email could not be delivered to the genuine inbox.
+        raise HTTPException(
+            status_code=503,
+            detail="OTP email deliver nahi ho paya. Render Free Tier par SMTP port 587 block hai. Render dashboard mein BREVO_API_KEY add karein."
+        )
+
+    return {"message": "OTP sent successfully to your email"}
 
 @app.post("/signup")
 def signup(user: UserCreate, db: Session = Depends(database.get_db)):
