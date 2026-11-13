@@ -24,3 +24,10 @@ class ScanHistory(Base):
     disease = Column(String(255))
     confidence = Column(String(50))
     created_at = Column(TIMESTAMP, server_default=func.now())
+
+class OTPVerification(Base):
+    __tablename__ = "otp_verifications"
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(255), index=True)
+    otp = Column(String(10))
+    created_at = Column(TIMESTAMP, server_default=func.now())

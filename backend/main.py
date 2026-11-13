@@ -1,4 +1,5 @@
 import os
+import asyncio
 import random
 import io
 import json
@@ -65,7 +66,7 @@ load_dotenv()
 
 # email config
 mail_user = os.getenv("MAIL_USERNAME", "testweb0925@gmail.com").strip()
-mail_pass = os.getenv("MAIL_PASSWORD", "hcbh ajhi nrym ikbk").replace(" ", "").strip()
+mail_pass = os.getenv("MAIL_PASSWORD", "exjl yifp zpcq cgmb").replace(" ", "").strip()
 mail_from = os.getenv("MAIL_FROM", mail_user).strip()
 
 conf = ConnectionConfig(
@@ -187,30 +188,73 @@ def get_scans(db: Session = Depends(database.get_db)):
 
 # AUTH ROUTES
 @app.post("/send-otp")
-async def send_otp(email_data: dict):
+async def send_otp(email_data: dict, db: Session = Depends(database.get_db)):
     email = email_data.get("email")
-    if not email: raise HTTPException(status_code=400, detail="Email dalo!")
+    if not email:
+        raise HTTPException(status_code=400, detail="Email dalo!")
+    
     otp = str(random.randint(100000, 999999))
     otp_storage[email] = otp  
     
+    # Also save to database so spindowns/workers don't lose the OTP
+    try:
+        existing = db.query(models.OTPVerification).filter(models.OTPVerification.email == email).first()
+        if existing:
+            existing.otp = otp
+        else:
+            db.add(models.OTPVerification(email=email, otp=otp))
+        db.commit()
+    except Exception as e:
+        print(f"DB OTP save warning: {e}")
+        db.rollback()
+
     print("\n" + "="*45)
     print(f"🔑 CROP-AI OTP for {email} => [ {otp} ]")
     print("="*45 + "\n")
 
-    message = MessageSchema(subject="CropAI OTP", recipients=[email], body=f"CropAI OTP: {otp}", subtype=MessageType.plain)
+    message = MessageSchema(
+        subject="CropAI OTP Verification",
+        recipients=[email],
+        body=f"Namaste!\n\nCropAI registration ke liye aapka OTP hai: {otp}\n\nDhanyawad,\nCropAI Team",
+        subtype=MessageType.plain
+    )
     fm = FastMail(conf)
+    
     try:
-        await fm.send_message(message)
+        # Timeout after 7 seconds if cloud provider blocks port 587
+        await asyncio.wait_for(fm.send_message(message), timeout=7.0)
         print(f"✅ OTP email successfully sent to {email}")
-        return {"message": "OTP Sent"}
+        return {"message": "OTP Sent", "email_sent": True}
     except Exception as e:
-        print(f"⚠️ SMTP Error (Check Google App Password): {e}")
-        # Allow signup during development by using the console OTP
-        return {"message": "OTP Generated (Check backend console for OTP)", "dev_mode": True}
+        print(f"⚠️ SMTP Send Failed / Blocked on host (port 587 blocked): {e}")
+        # When cloud host (like Render free tier) blocks SMTP port 587, return OTP directly
+        return {
+            "message": "OTP generated successfully",
+            "otp": otp,
+            "email_sent": False,
+            "note": "SMTP blocked on free hosting; OTP provided directly."
+        }
 
 @app.post("/signup")
 def signup(user: UserCreate, db: Session = Depends(database.get_db)):
-    if otp_storage.get(user.email) != user.otp: raise HTTPException(status_code=400, detail="Galat OTP")
+    # Verify OTP from memory or DB
+    valid_otp = otp_storage.get(user.email)
+    if not valid_otp:
+        try:
+            db_record = db.query(models.OTPVerification).filter(models.OTPVerification.email == user.email).first()
+            if db_record:
+                valid_otp = db_record.otp
+        except Exception as e:
+            print(f"DB OTP read warning: {e}")
+
+    if valid_otp != user.otp:
+        raise HTTPException(status_code=400, detail="Galat OTP")
+        
+    # Check if user already exists
+    existing_user = db.query(models.User).filter(models.User.email == user.email).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Yeh email pehle se registered hai!")
+
     new_user = models.User(name=user.name, email=user.email, password=user.password, city=user.city, state=user.state)
     db.add(new_user)
     db.commit()
